@@ -1,0 +1,31 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "pip install (Python 3.12)",
+      "type": "shell",
+      "command": "py -3.12 -m pip install --upgrade pip; py -3.12 -m pip install -r requirements.txt",
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "shell": {
+          "executable": "powershell.exe",
+          "args": ["-NoProfile", "-Command"]
+        }
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Streamlit: dashboard (port 8501)",
+      "type": "shell",
+      "command": "py -3.12 -m streamlit run dashboard.py --server.port 8501",
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "shell": {
+          "executable": "powershell.exe",
+          "args": ["-NoProfile", "-Command"]
+        }
+      },
+      "problemMatcher": []
+    }
+  ]
+}
