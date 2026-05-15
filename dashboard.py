@@ -15,8 +15,9 @@ import streamlit as st
 
 from backtest import CHART_PATH, run_backtest
 from data import DEFAULT_TICKER, prepare_stock_data
-from model import MODEL_PATH, ensure_model, train_and_save
 from hmm_signal import attach_signals_to_frame, generate_signals, print_latest_summary
+from model import MODEL_PATH, ensure_model, train_and_save
+from ticker_suggest import suggest_tickers
 
 
 def regime_html(bundle: dict, state_idx: int) -> str:
@@ -27,11 +28,76 @@ def regime_html(bundle: dict, state_idx: int) -> str:
     return '<span style="color:white;background:#7f7f7f;padding:6px 12px;border-radius:6px;font-weight:700;">SIDEWAYS</span>'
 
 
+def _inject_autocomplete_styles() -> None:
+    """Dropdown panel styling under the ticker search field."""
+    st.markdown(
+        """
+        <style>
+        div[data-testid="stVerticalBlock"]:has(div.ticker-suggest-panel) {
+            gap: 0.15rem;
+        }
+        .ticker-suggest-panel {
+            border: 1px solid rgba(49, 51, 63, 0.2);
+            border-radius: 0 0 0.5rem 0.5rem;
+            background: rgba(240, 242, 246, 0.6);
+            padding: 0.25rem 0.35rem 0.45rem;
+            margin-top: -0.6rem;
+        }
+        .ticker-suggest-hint {
+            font-size: 0.78rem;
+            color: #6b7280;
+            padding: 0.1rem 0.35rem 0.35rem;
+        }
+        div[data-testid="stVerticalBlock"] button[kind="secondary"] p {
+            text-align: left;
+            font-size: 0.9rem;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_ticker_search(default: str = DEFAULT_TICKER) -> str:
+    """
+    Search field with live suggestions while typing.
+
+    Click a suggestion to fill the field. Returns the uppercase ticker symbol.
+    """
+    if "ticker_query" not in st.session_state:
+        st.session_state.ticker_query = default
+
+    query_raw = st.text_input(
+        "Stock ticker",
+        key="ticker_query",
+        placeholder="Symbol or name: AAPL, RELIANCE, TCS.NS, GOLDBEES.NS ...",
+        help="US, NSE (.NS), and BSE (.BO) symbols. Type without .NS to match Indian names (e.g. RELIANCE -> RELIANCE.NS).",
+    )
+    query = (query_raw or "").upper().strip()
+
+    matches = suggest_tickers(query)
+    show_panel = bool(matches) and (not query or query not in {m[0] for m in matches})
+
+    if show_panel:
+        hint = "Popular symbols" if not query else f'Matches for "{query}"'
+        with st.container(border=True):
+            st.caption(hint)
+            for sym, name in matches:
+                label = f"{sym} - {name}"
+                if st.button(label, key=f"ticker_pick_{sym}", use_container_width=True):
+                    st.session_state.ticker_query = sym
+                    st.rerun()
+
+    return query or default
+
+
 def main() -> None:
     st.set_page_config(page_title="HMM Stock Prototype", layout="wide")
+    _inject_autocomplete_styles()
     st.title("Hidden Markov Model — regime & signal dashboard")
 
-    ticker = st.text_input("Stock ticker", value=DEFAULT_TICKER).upper().strip()
+    ticker = render_ticker_search(DEFAULT_TICKER)
+
     col_a, col_b = st.columns(2)
     with col_a:
         retrain = st.button("Force retrain model", help="Ignores hmm_model.pkl and fits a fresh HMM.")
@@ -63,7 +129,6 @@ def main() -> None:
 
     sig = generate_signals(bundle, prep.X_scaled_full, prep.df.index)
 
-    # Echo the same console summary underneath for quick auditing.
     print_latest_summary(bundle, sig, prep.df)
 
     with st.spinner("Backtesting and refreshing chart…"):
@@ -116,7 +181,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    # When executed as a script outside Streamlit, point users to the right command.
     if "streamlit" not in sys.modules:  # pragma: no cover
         print("Launch with: streamlit run dashboard.py", file=sys.stderr)
     main()
